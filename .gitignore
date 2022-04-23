@@ -217,4 +217,3 @@ cython_debug/
 .idea/
 TensorRT/
 triton_models/
-bert-base-ner/

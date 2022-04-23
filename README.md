@@ -138,9 +138,9 @@ To get very low latency inference in your Python code (no inference server): [cl
 
 ### Token-classification (NER) (encoder model)
 
-Named Entity Recognition NER works by locating and identifying the named entities present in unstructured text 
-into the standard categories such as person names, locations, organizations, time expressions, quantities, 
-monetary values, percentage, codes etc.
+Token classification assigns a label to individual tokens in a sentence.
+One of the most common token classification tasks is Named Entity Recognition (NER). 
+NER attempts to find a label for each entity in a sentence, such as a person, location, or organization.
 
 #### Optimize existing model
 
@@ -157,13 +157,13 @@ docker run -it --rm --gpus all \
 
 # output:  
 # ...
-# Inference done on NVIDIA GeForce RTX 3090
+# Inference done on NVIDIA GeForce GTX 1080 Ti
 # latencies:
-# [Pytorch (FP32)] mean=5.43ms, sd=0.70ms, min=4.88ms, max=7.81ms, median=5.09ms, 95p=7.01ms, 99p=7.53ms
-# [Pytorch (FP16)] mean=6.55ms, sd=1.00ms, min=5.75ms, max=10.38ms, median=6.01ms, 95p=8.57ms, 99p=9.21ms
-# [TensorRT (FP16)] mean=0.53ms, sd=0.03ms, min=0.49ms, max=0.61ms, median=0.52ms, 95p=0.57ms, 99p=0.58ms
-# [ONNX Runtime (FP32)] mean=1.57ms, sd=0.05ms, min=1.49ms, max=1.90ms, median=1.57ms, 95p=1.63ms, 99p=1.76ms
-# [ONNX Runtime (optimized)] mean=0.90ms, sd=0.03ms, min=0.88ms, max=1.23ms, median=0.89ms, 95p=0.95ms, 99p=0.97ms
+# [Pytorch (FP32)] mean=6.97ms, sd=0.24ms, min=6.88ms, max=13.15ms, median=6.94ms, 95p=7.11ms, 99p=7.86ms
+# [Pytorch (FP16)] mean=6.84ms, sd=0.04ms, min=6.81ms, max=7.74ms, median=6.83ms, 95p=6.88ms, 99p=6.94ms
+# [TensorRT (FP16)] mean=4.96ms, sd=0.07ms, min=4.80ms, max=5.21ms, median=4.98ms, 95p=5.05ms, 99p=5.14ms
+# [ONNX Runtime (FP32)] mean=5.79ms, sd=0.18ms, min=5.71ms, max=6.93ms, median=5.74ms, 95p=5.96ms, 99p=6.90ms
+# [ONNX Runtime (optimized)] mean=5.07ms, sd=0.03ms, min=5.01ms, max=5.30ms, median=5.07ms, 95p=5.11ms, 99p=5.22ms
 # Each infence engine output is within 0.3 tolerance compared to Pytorch output
 ```
 
@@ -180,7 +180,8 @@ For production, it's advised to build your own 3-line Docker image with `transfo
 ```shell
 docker run -it --rm --gpus all -p8000:8000 -p8001:8001 -p8002:8002 --shm-size 256m \
   -v $PWD/triton_models:/models nvcr.io/nvidia/tritonserver:22.01-py3 \
-  bash -c "pip install transformers && tritonserver --model-repository=/models"
+  bash -c "pip install transformers torch==1.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html && \
+  tritonserver --model-repository=/models"
 
 # output:
 # ...
@@ -199,7 +200,7 @@ curl -X POST  http://localhost:8000/v2/models/transformer_onnx_inference/version
   --header "Inference-Header-Content-Length: 161"
 
 # output:
-# {"model_name":"transformer_onnx_inference","model_version":"1","parameters":{"sequence_id":0,"sequence_start":false,"sequence_end":false},"outputs":[{"name":"output","datatype":"FP32","shape":[1,2],"data":[-3.431640625,3.271484375]}]}
+# {"model_name":"transformer_onnx_inference","model_version":"1","outputs":[{"name":"output","datatype":"BYTES","shape":[],"data":["[{\"entity_group\": \"ORG\", \"score\": 0.9848777055740356, \"word\": \"Infinity\", \"start\": 45, \"end\": 53}]"]}]}
 ```
 
 
@@ -237,7 +238,7 @@ docker run -it --rm --gpus all \
 ```shell
 docker run -it --rm --gpus all -p8000:8000 -p8001:8001 -p8002:8002 --shm-size 256m \
   -v $PWD/triton_models:/models nvcr.io/nvidia/tritonserver:22.01-py3 \
-  bash -c "pip install transformers torch --extra-index-url https://download.pytorch.org/whl/cpu && tritonserver --model-repository=/models"
+  bash -c "pip install transformers && tritonserver --model-repository=/models"
 
 # output:
 # ...
@@ -277,7 +278,7 @@ docker run -it --rm --gpus all \
   -v $PWD:/project ghcr.io/els-rd/transformer-deploy:0.4.0 \
   bash -c "cd /project && \
     convert_model -m gpt2 \
-    --backend onnx \
+    --backend tensorrt onnx \
     --seq-len 6 256 256 \
     --task text-generation"
 
