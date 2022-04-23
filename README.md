@@ -278,7 +278,7 @@ docker run -it --rm --gpus all \
   -v $PWD:/project ghcr.io/els-rd/transformer-deploy:0.4.0 \
   bash -c "cd /project && \
     convert_model -m gpt2 \
-    --backend onnx \
+    --backend tensorrt onnx \
     --seq-len 6 256 256 \
     --task text-generation"
 
