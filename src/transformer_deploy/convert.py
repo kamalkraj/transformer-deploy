@@ -60,6 +60,7 @@ from transformer_deploy.benchmarks.utils import (
 from transformer_deploy.triton.configuration import Configuration, EngineType
 from transformer_deploy.triton.configuration_decoder import ConfigurationDec
 from transformer_deploy.triton.configuration_encoder import ConfigurationEnc
+from transformer_deploy.triton.configuration_token_classifier import ConfigurationTokenClassifier
 from transformer_deploy.utils.args import parse_args
 
 
@@ -202,7 +203,14 @@ def main(commands: argparse.Namespace):
             inputs=inputs_pytorch,
             nb_measures=commands.nb_measures,
         )
-        conf_class: Type[Configuration] = ConfigurationDec if commands.task == "text-generation" else ConfigurationEnc
+         
+        if commands.task == "text-generation":
+            conf_class: Type[Configuration] = ConfigurationDec
+        elif commands.task == "token-classification":
+            conf_class: Type[Configuration] = ConfigurationTokenClassifier
+        else:
+            conf_class = ConfigurationEnc
+
         triton_conf = conf_class(
             model_name_base=commands.name,
             dim_output=get_triton_output_shape(output=pytorch_output[0], task=commands.task),
