@@ -30,6 +30,7 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
     AutoTokenizer,
     PretrainedConfig,
     PreTrainedModel,
@@ -116,7 +117,7 @@ def launch_inference(
 def get_triton_output_shape(output: torch.Tensor, task: str) -> List[int]:
     triton_output_shape = list(output.shape)
     triton_output_shape[0] = -1  # dynamic batch size
-    if task == "text-generation":
+    if task in ["text-generation", "token-classification"]:
         triton_output_shape[1] = -1  # dynamic sequence size
     return triton_output_shape
 
@@ -156,6 +157,8 @@ def main(commands: argparse.Namespace):
         model_pytorch: Union[PreTrainedModel, STransformerWrapper] = load_sentence_transformers(commands.model)
     elif commands.task == "classification":
         model_pytorch = AutoModelForSequenceClassification.from_pretrained(commands.model, use_auth_token=auth_token)
+    elif commands.task == "token-classification":
+        model_pytorch = AutoModelForTokenClassification.from_pretrained(commands.model, use_auth_token=auth_token)
     elif commands.task == "text-generation":
         model_pytorch = AutoModelForCausalLM.from_pretrained(commands.model, use_auth_token=auth_token)
         input_names = ["input_ids"]
@@ -181,13 +184,13 @@ def main(commands: argparse.Namespace):
         output_path=onnx_model_path,
         inputs_pytorch=inputs_pytorch[0],
         quantization=commands.quantization,
-        var_output_seq=commands.task == "text-generation",
+        var_output_seq=commands.task in ["text-generation", "token-classification"],
     )
 
     timings = {}
 
     def get_pytorch_infer(model: PreTrainedModel, cuda: bool, task: str):
-        if task in ["classification", "text-generation"]:
+        if task in ["classification", "text-generation", "token-classification"]:
             return infer_classification_pytorch(model=model, run_on_cuda=cuda)
         if task == "embedding":
             return infer_feature_extraction_pytorch(model=model, run_on_cuda=cuda)

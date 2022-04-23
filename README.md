@@ -136,6 +136,73 @@ Model output is at the end of the Json (`data` field).
 
 To get very low latency inference in your Python code (no inference server): [click here](https://els-rd.github.io/transformer-deploy/python/)
 
+### Token-classification (NER) (encoder model)
+
+Named Entity Recognition NER works by locating and identifying the named entities present in unstructured text 
+into the standard categories such as person names, locations, organizations, time expressions, quantities, 
+monetary values, percentage, codes etc.
+
+#### Optimize existing model
+
+This will optimize models, generate Triton configuration and Triton folder layout in a single command:
+
+```shell
+docker run -it --rm --gpus all \
+  -v $PWD:/project ghcr.io/els-rd/transformer-deploy:0.4.0 \
+  bash -c "cd /project && \
+    convert_model -m \"dslim/bert-base-NER\" \
+    --backend tensorrt onnx \
+    --seq-len 16 128 128 \
+    --task token-classification"
+
+# output:  
+# ...
+# Inference done on NVIDIA GeForce RTX 3090
+# latencies:
+# [Pytorch (FP32)] mean=5.43ms, sd=0.70ms, min=4.88ms, max=7.81ms, median=5.09ms, 95p=7.01ms, 99p=7.53ms
+# [Pytorch (FP16)] mean=6.55ms, sd=1.00ms, min=5.75ms, max=10.38ms, median=6.01ms, 95p=8.57ms, 99p=9.21ms
+# [TensorRT (FP16)] mean=0.53ms, sd=0.03ms, min=0.49ms, max=0.61ms, median=0.52ms, 95p=0.57ms, 99p=0.58ms
+# [ONNX Runtime (FP32)] mean=1.57ms, sd=0.05ms, min=1.49ms, max=1.90ms, median=1.57ms, 95p=1.63ms, 99p=1.76ms
+# [ONNX Runtime (optimized)] mean=0.90ms, sd=0.03ms, min=0.88ms, max=1.23ms, median=0.89ms, 95p=0.95ms, 99p=0.97ms
+# Each infence engine output is within 0.3 tolerance compared to Pytorch output
+```
+
+It will output mean latency and other statistics.  
+Usually `Nvidia TensorRT` is the fastest option and `ONNX Runtime` is usually a strong second option.  
+On ONNX Runtime, `optimized` means that kernel fusion and mixed precision are enabled.  
+`Pytorch` is never competitive on transformer inference, including mixed precision, whatever the model size.  
+
+#### Run Nvidia Triton inference server
+
+Note that we install `transformers` at run time.  
+For production, it's advised to build your own 3-line Docker image with `transformers` pre-installed.
+
+```shell
+docker run -it --rm --gpus all -p8000:8000 -p8001:8001 -p8002:8002 --shm-size 256m \
+  -v $PWD/triton_models:/models nvcr.io/nvidia/tritonserver:22.01-py3 \
+  bash -c "pip install transformers && tritonserver --model-repository=/models"
+
+# output:
+# ...
+# I0207 09:58:32.738831 1 grpc_server.cc:4195] Started GRPCInferenceService at 0.0.0.0:8001
+# I0207 09:58:32.739875 1 http_server.cc:2857] Started HTTPService at 0.0.0.0:8000
+# I0207 09:58:32.782066 1 http_server.cc:167] Started Metrics Service at 0.0.0.0:8002
+```
+
+#### Query inference 
+
+Query ONNX models (replace `transformer_onnx_inference` by `transformer_tensorrt_inference` to query TensorRT engine):
+
+```shell
+curl -X POST  http://localhost:8000/v2/models/transformer_onnx_inference/versions/1/infer \
+  --data-binary "@demo/infinity/query_body.bin" \
+  --header "Inference-Header-Content-Length: 161"
+
+# output:
+# {"model_name":"transformer_onnx_inference","model_version":"1","parameters":{"sequence_id":0,"sequence_start":false,"sequence_end":false},"outputs":[{"name":"output","datatype":"FP32","shape":[1,2],"data":[-3.431640625,3.271484375]}]}
+```
+
+
 ### Feature extraction / dense embeddings
 
 Feature extraction in NLP is the task to convert text to dense embeddings.  
@@ -170,7 +237,7 @@ docker run -it --rm --gpus all \
 ```shell
 docker run -it --rm --gpus all -p8000:8000 -p8001:8001 -p8002:8002 --shm-size 256m \
   -v $PWD/triton_models:/models nvcr.io/nvidia/tritonserver:22.01-py3 \
-  bash -c "pip install transformers && tritonserver --model-repository=/models"
+  bash -c "pip install transformers torch --extra-index-url https://download.pytorch.org/whl/cpu && tritonserver --model-repository=/models"
 
 # output:
 # ...
@@ -210,7 +277,7 @@ docker run -it --rm --gpus all \
   -v $PWD:/project ghcr.io/els-rd/transformer-deploy:0.4.0 \
   bash -c "cd /project && \
     convert_model -m gpt2 \
-    --backend tensorrt onnx \
+    --backend onnx \
     --seq-len 6 256 256 \
     --task text-generation"
 
